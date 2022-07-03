@@ -25,8 +25,8 @@
 # Python Library Pathの設定
 #
 import sys
-sys.path.append("../const")
-sys.path.append("../libraries")
+sys.path.append("const")
+sys.path.append("libraries")
 
 from DesSecuritiesConst import MY_SLACK_WEB_HOOK_DISCLOSURE    # WebHookのURLをコミットしないようにするため別ファイルからインポート
 
