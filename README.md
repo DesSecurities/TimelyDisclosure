@@ -21,4 +21,3 @@ Timely Disclosure from TDNET, Kabutan, PRTIMES will be notified you ASAP.
  
 3.PRTIMES版
 　python PrtimesDisclosureWatcher.py
-  ※まだ開発中なので動作しない
