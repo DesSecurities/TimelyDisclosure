@@ -23,7 +23,7 @@
 # Python Library Pathの設定
 #
 import sys
-from tkinter.ttk import Separator
+
 sys.path.append("const")
 sys.path.append("libraries")
 
