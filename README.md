@@ -18,3 +18,7 @@ Timely Disclosure will be notified you ASAP.
 
 2.株探版
 　python KabutanDisclosureWatcher.py
+ 
+3.PRTIMES版
+　python PrtimesDisclosureWatcher.py
+  ※まだ開発中なので動作しない
