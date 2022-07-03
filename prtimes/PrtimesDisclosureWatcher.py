@@ -23,6 +23,7 @@
 # Python Library Pathの設定
 #
 import sys
+from tkinter.ttk import Separator
 sys.path.append("const")
 sys.path.append("libraries")
 
@@ -209,7 +210,7 @@ def sendSlackDM(code, message):
     #
     # 東証以外の地方証券を除外する、ただし東証ProMarketや東証REITは削除できないのでコード判別
     #
-    if((code is "NOLIST") or IsRakutenAvailable(code)):
+    if IsRakutenAvailable(code):
         return
 
     #
@@ -240,6 +241,7 @@ def sendSlackDM(code, message):
     latest_tick = ""
     latest_flag = ""
     market_type = ""
+    meigaraname = ""
     separator = "==============================\r\n"
 
     #
@@ -275,6 +277,8 @@ def sendSlackDM(code, message):
     #
     if market_type == 0:
         return
+    else:
+        meigaraname = rss(stock_code, '銘柄名称')
 
     #
     # ザラバもしくはPTSの出来高を取得します
@@ -328,7 +332,14 @@ def sendSlackDM(code, message):
             else:
                 itaprice.append(0.0)
         
-        itatext = "成売 = {:,.0f} 成買 = {:,.0f}\r\n".format(itaprice[0], itaprice[1]) + \
+        meigara_info = "[" + str(code) + ":" + market_type + "]" + \
+                    meigaraname + " [" + \
+                    "<https://finance.yahoo.co.jp/search/?query=" + str(code) + " | ヤ> " + \
+                    "<https://kabutan.jp/stock/?code=" + str(code) + " | 株> " + \
+                    "<https://shikiho.toyokeizai.net/stocks/" + str(code) + " | 四> " + \
+                    "<https://www.rakuten-sec.co.jp/web/search/?page=1&d=&doctype=all&q=" + str(code) + \
+                    "&sort=0&pagemax=10&imgsize=0/"  + " | 楽天>]" + "\r\n"
+        itatext = meigara_info + "成売 = {:,.0f} 成買 = {:,.0f}\r\n".format(itaprice[0], itaprice[1]) + \
                   "Over = {:,.0f}\r\n".format(itaprice[2])
         for num in range(4, 4 + 20):
             if num < 4 + 10:
@@ -343,7 +354,14 @@ def sendSlackDM(code, message):
         #
         slack.notify(text = message + "\r\n\r\n" + itatext)
     else:
-        slack.notify(text = message + "\r\n\r\n" + 
+        meigara_info = "[" + str(code) + ":" + market_type + "]" + \
+                    meigaraname + " [" + \
+                    "<https://finance.yahoo.co.jp/search/?query=" + str(code) + " | ヤ> " + \
+                    "<https://kabutan.jp/stock/?code=" + str(code) + " | 株> " + \
+                    "<https://shikiho.toyokeizai.net/stocks/" + str(code) + " | 四> " + \
+                    "<https://www.rakuten-sec.co.jp/web/search/?page=1&d=&doctype=all&q=" + str(code) + \
+                    "&sort=0&pagemax=10&imgsize=0/"  + " | 楽天>]" + "\r\n"
+        slack.notify(text = message + "\r\n\r\n" + meigara_info + \
                     "当日終値 = " + "{:,.0f}".format(latest_close) + " (" + str(latest_date) + ") "  + str(latest_tick) + " " + str(latest_flag) +"\r\n" + \
                     "PTS 始値 = " + "{:,.0f}".format(open) + " (" + str(opentime) + ")\r\n" + \
                     "PTS 高値 = " + "{:,.0f}".format(high) + " (" + str(hightime) + ")\r\n" + \
@@ -365,7 +383,7 @@ def main():
     url_login = "https://prtimes.jp/"
     browser.get(url_login)
     time.sleep(3)
-    print("ログインした")
+    print("Login to PRTIMES")
     
     browser.find_element_by_xpath('/html/body/header/div/div[1]/ul/li[3]/a').click()
     time.sleep(3)
@@ -396,24 +414,33 @@ def main():
     df_meigara = pd.read_csv("data/CorporateCodeIndex.csv", names=('銘柄コード', '銘柄名称'))
 
     count = 0
-    for i in range(1000):
-        print(datetime.now())
-        count = count+1
-        print("カウント",count)
-        print("no_code_company_list",no_code_company_list)
-    
-        #browser.find_element_by_xpath('//*[@id="newBtn"]/a').click() #最新の状態にする
+#    for i in range(1000):
+
+    while(True):
+        #
+        # もし現在時刻をHH:MM:10まで待つ処理
+        #
+        wait_second = 10    # 1～10あたりにして、更新直後を狙って読みに行く
+        prev_second = datetime.now().second
+
+        while(True):
+            dt_now = datetime.now()
+            if (dt_now.second >= wait_second) and (prev_second < wait_second):
+                break
+            prev_second = dt_now.second
+            time.sleep(1.0)
+
+        #
         #ページを更新(ブラウザのリフレッシュ)
+        #
         browser.refresh()
-        print("最新の状態にしました")
+        dt_now = datetime.now()
+        print(dt_now.strftime('Refresh PRTimes Web page : %Y/%m/%d %H:%M:%S'))
 
         html = browser.page_source.encode('utf-8')
         parse_html = BeautifulSoup(html,'html.parser')
 
         section_all = parse_html.findAll("section")
-
-        #print("######################################################################################################################")
-        #print(section_all)
 
         a = [] #リストを６つ用意
         
@@ -421,14 +448,13 @@ def main():
         dt_now_str = str(dt_now)[:16] 
 
         for section in section_all:
-            #print("aのリストの個数",len(a))
             if len(a) > 15: #開示件数。
                 break
 
             if section.a.get("href") == "":
                 print("リンク無いです")
                 continue
-            #print("テス")
+
             kaiji_text = section.h2.a.text
             a += [kaiji_text]
 
@@ -450,23 +476,20 @@ def main():
             #
             kaiji_time = dt_now_str + " から約" + section.time.text
             print(kaiji_text, kaiji_time)
-            if not '分前' in kaiji_time:
-                #print("ここまでが1時間前の開示") ############## 1時間以内の告知
-                break
+#            if not '分前' in kaiji_time:
+#                #print("ここまでが1時間前の開示") ############## 1時間以内の告知
+#                break
             
-            continue_count = 0
-
-            #print(df_meigara_dictionary.index[df_meigara_dictionary['銘柄名称'].str.contains(company_name)].tolist())
-            print("部分一致 ", company_name, df_meigara.loc[df_meigara['銘柄名称'].str.contains(company_name)])
-            print("完全一致 ", company_name, df_meigara.loc[df_meigara['銘柄名称'] == company_name])
-
-            df = df_meigara[df_meigara['銘柄名称'] == company_name]
-            if df.empty:
-                #
-                # 上場企業に該当していない場合
-                #
+            code = -1
+            for index, row in df_meigara.iterrows():
+                if row['銘柄名称'] in company_name:
+                    code = int(row['銘柄コード'])
+                    break
+            #
+            # 上場企業に該当していない場合
+            #
+            if code is -1:
                 continue
-            code = int(df.at[0, '銘柄コード'])
 
             #
             # お好みで、取得したい開示キーワードをここにセットしま
@@ -479,13 +502,14 @@ def main():
                                  'メタバース','WEB3','NFT','ＮＦＴ','半導体','発電','電力','自動運転',
                                  'Google','シャープ','トヨタ','マツダ','りそな銀行','基礎科学']
 
-            isFoundIndex = -1
+            isFoundIndex = 0
             for index, word in enumerate(keyword):
                 if word in kaiji_text:
                     isFoundIndex = index
                     break
-            
+
             if isFoundIndex is not -1:
+                '''
                 slack_message = dt_now.strftime('%Y/%m/%d %H:%M:%S') + \
                                 " | [PRTIMES] Press Release\r\n◆" + keyword[isFoundIndex] + "◆" + \
                                 str(code) + "◆" + \
@@ -493,11 +517,15 @@ def main():
                                 kaiji_time + "\n<" +  \
                                 kaiji_url + "| " + \
                                 kaiji_text + ">"
+                '''
+                slack_message = "==============================\r\n" + \
+                                dt_now.strftime('%Y/%m/%d %H:%M:%S') + " | [PRTIMES] 開示\r\n" + \
+                                "==============================\r\n" + \
+                                company_name + " : " + \
+                                kaiji_time + "\r\n<" +  \
+                                kaiji_url + "| " + \
+                                kaiji_text + ">"
                 sendSlackDM(code, slack_message)
-
-
-        print(datetime.now())
-        time.sleep(60)
 
 #
 # メインプログラム
