@@ -1,5 +1,5 @@
 # disclosure
-Timely Disclosure will be notified you ASAP.
+Timely Disclosure from TDNET, Kabutan, PRTIMES will be notified you ASAP.
 
 [このアプリケーションについて]
 このアプリケーションは、東京証券取引所から開示される「適時開示」をTDNETもしくは株探からピックアップし高速にSLACKに通知するアプリケーションです。
