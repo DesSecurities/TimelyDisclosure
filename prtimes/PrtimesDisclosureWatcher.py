@@ -39,8 +39,8 @@ import numpy as np
 import calendar
 import csv
 
-import datetime
 from datetime import date, timedelta
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -271,6 +271,12 @@ def sendSlackDM(code, message):
         stock_code = str(code) + '.JNX'
 
     #
+    # 楽天証券に存在しない銘柄は通知しない
+    #
+    if market_type == 0:
+        return
+
+    #
     # ザラバもしくはPTSの出来高を取得します
     #
     volume = float(rss(stock_code, '出来高'))
@@ -346,6 +352,9 @@ def sendSlackDM(code, message):
                     "PTS 出来高 = " + "{:,.0f}".format(volume) + "  PTS VWAP = " + "{:,.2f}".format(vwap) + "\r\n" + \
                     "PER = " + "{:,.2f}".format(per) + " PBR = " + "{:,.2f}".format(pbr))
 
+#
+# メインプログラム
+#
 def main():
     browser = webdriver.Chrome(executable_path=WEB_DRIVER_PATH)
     browser.implicitly_wait(3)
@@ -377,40 +386,20 @@ def main():
     
     time.sleep(3)
     
-##### 株価検索欄にコードを入力　四季報のページに飛んでから全て処理するので、まず最初のコードを入れる。
-
-    #elem = browser.find_element_by_name('i_stock_sec') #googleの検証で枠内のnameを見つける。i_stock_sec だった。
-    #elem.clear()
-    #elem.send_keys(first_code)
-    
-    
-    line_send_list = []
     no_code_company_list = []
     
     url0 = 'https://prtimes.jp/main/html/rd/p/'
     
-#    master_path ='./PRTIMES用_銘柄辞書マスタ最新版.xlsx'
-    master_path ='./です證券_PRTIMES用_銘柄辞書マスタ最新版.xlsx'
-    wb_master = load_workbook(master_path)
-    ws_master = wb_master.active
-    ws_master_max_row = ws_master.max_row
-
-    csv_header = ['銘柄コード', '銘柄名称']
-    with open("./CorporateCodeIndex.csv", "r", encoding="utf-8") as csvfile:
-        #
-        #CSVファイルを辞書型で読み込む
-        #
-        corporate_dic = csv.DictReader(csvfile, csv_header)
-        for row in corporate_dic:
-            print(row)
-
+    #
+    # 銘柄コード, キーワード(銘柄名称)の辞書 CSVデータの読み込み
+    #
+    df_meigara = pd.read_csv("data/CorporateCodeIndex.csv", names=('銘柄コード', '銘柄名称'))
 
     count = 0
     for i in range(1000):
-        print(datetime.datetime.now())
+        print(datetime.now())
         count = count+1
         print("カウント",count)
-        print("line_send_list",line_send_list)
         print("no_code_company_list",no_code_company_list)
     
         #browser.find_element_by_xpath('//*[@id="newBtn"]/a').click() #最新の状態にする
@@ -421,10 +410,6 @@ def main():
         html = browser.page_source.encode('utf-8')
         parse_html = BeautifulSoup(html,'html.parser')
 
-
-
-        #print(parse_html)
-
         section_all = parse_html.findAll("section")
 
         #print("######################################################################################################################")
@@ -432,13 +417,12 @@ def main():
 
         a = [] #リストを６つ用意
         
-        dt_now = datetime.datetime.now()
+        dt_now = datetime.now()
         dt_now_str = str(dt_now)[:16] 
-
 
         for section in section_all:
             #print("aのリストの個数",len(a))
-            if len(a) >15: #開示件数。
+            if len(a) > 15: #開示件数。
                 break
 
             if section.a.get("href") == "":
@@ -449,7 +433,7 @@ def main():
             a += [kaiji_text]
 
             url_temp = str(section.h2.a.get("href"))        # a href="action.php?run=mypage&amp;page=detail&amp;company_id=51247&amp;release_id=75"
-            url_temp = url_temp.split("id=")                           # id= で分けて、company_id　release_id　を取り出す
+            url_temp = url_temp.split("id=")                # id= で分けて、company_id　release_id　を取り出す
             company_id = url_temp[1].split("&")[0]
             release_id = url_temp[2]
             kaiji_url = url1 = url0  +  '{}.{}.html'.format(release_id.zfill(9),company_id.zfill(9))
@@ -459,100 +443,60 @@ def main():
             for p in ps:
                 #count += 1
                 if p.get("class")[0] == "company-name": 
-                    company_name = p.text
-                    company_name.replace('株式会社', '')
+                    company_name = p.text.replace('株式会社', '')
 
-                     #p.get("class")[0] [0]をつけないと認識されない。
-                #print(p.text,p.get("class"),count) #カルビー株式会社 ['company-name'] 2
-                #print(p.get("class"))
-            kaiji_time = dt_now_str+" から約"+section.time.text
-            #print(kaiji_text,kaiji_time)
+            #
+            # から約〇〇分前という文字列以外は1時間以上経過しているので処理しない
+            #
+            kaiji_time = dt_now_str + " から約" + section.time.text
+            print(kaiji_text, kaiji_time)
             if not '分前' in kaiji_time:
-                print("ここまでが1時間前の開示") ############## 1時間以内の告知
+                #print("ここまでが1時間前の開示") ############## 1時間以内の告知
                 break
             
             continue_count = 0
-               
-            '''
-            for m in df:
-                if company_name == m[1]:
-                    code = m[0]
-                    if code == "非上場":
-                        continue_count = 1
-                        break
 
-                    else:
-                        #print("上場")
-                        break
+            #print(df_meigara_dictionary.index[df_meigara_dictionary['銘柄名称'].str.contains(company_name)].tolist())
+            print("部分一致 ", company_name, df_meigara.loc[df_meigara['銘柄名称'].str.contains(company_name)])
+            print("完全一致 ", company_name, df_meigara.loc[df_meigara['銘柄名称'] == company_name])
 
-                if m == ws_master_max_row:
-                    code = "NOLIST"
-                    if not company_name in no_code_company_list:
-                        no_code_company_list.append(company_name)
-            '''
-            for m in range(2,ws_master_max_row+1):
-                if company_name == ws_master.cell(row=m,column=2).value:
-                    code = ws_master.cell(row=m,column=1).value
-                    if code == "非上場":
-                        continue_count = 1
-                        break
-
-                    else:
-                        #print("上場")
-                        break
-
-                if m == ws_master_max_row:
-                    code = "NOLIST"
-                    if not company_name in no_code_company_list:
-                        no_code_company_list.append(company_name)
-            
-
-            if continue_count == 1:
-                print("非上場銘柄なので次行きます",company_name)
+            df = df_meigara[df_meigara['銘柄名称'] == company_name]
+            if df.empty:
+                #
+                # 上場企業に該当していない場合
+                #
                 continue
+            code = int(df.at[0, '銘柄コード'])
 
-            search_keyword_list = ["経済産業省","厚生労働省",'臨床',"治験","新薬","療法","抗ウィルス","承認","ワクチン",
-                                   "業務提携","補助金","助成金","配当金受領","出資",
-                                   "選定","認証","指数","オフィシャルパートナー","認定","採用","FDA",
-                                   "最新作","世界累計","事前登録","累計出荷数","契約数",'世界初','日本初','初','特許',"提供開始","世界で初めて",
-                                   "インド","中国","アメリカ","欧州","米国",
-                                   "メタバース","WEB3","NFT","ＮＦＴ","半導体","発電","電力","自動運転",
-                                   "Google","シャープ","トヨタ","マツダ","りそな銀行"] #NG 三井住友DSアセット
+            #
+            # お好みで、取得したい開示キーワードをここにセットしま
+            # 
+            keyword = ['経済産業省','厚生労働省','臨床','治験','新薬','療法','抗ウィルス','承認','ワクチン',
+                                 '業務提携','補助金','助成金','配当金受領','出資',
+                                 '選定','認証','指数','オフィシャルパートナー','認定','採用','FDA',
+                                 '最新作','世界累計','事前登録','累計出荷数','契約数','世界初','日本初','初','特許','提供開始','世界で初めて',
+                                 'インド','中国','アメリカ','欧州','米国',
+                                 'メタバース','WEB3','NFT','ＮＦＴ','半導体','発電','電力','自動運転',
+                                 'Google','シャープ','トヨタ','マツダ','りそな銀行','基礎科学']
 
-                    #
-                    # お好みで、取得したい開示キーワードをここにセットします
-                    #
-            for keyword in search_keyword_list:
-                #print(kaiji['表題'])
-                if keyword in kaiji_text:
-                    #print("kaiji_text",kaiji_text)
-                    #print("引っかった検索キーワード",keyword)
-                    if kaiji_url in line_send_list:
-                        continue
-                    else:   
-                        line_send_list.append(kaiji_url)
-                        
-                        """                         
-                        line_notify_token = '' # 発行したトークンキーを入力
-                        line_notify_api = 'https://notify-api.line.me/api/notify'
-                        message = dt_now.strftime('%Y/%m/%d %H:%M:%S') + "【PRTIMES】 \n◆"+ keyword +"◆"+str(code)+"◆" + company_name+"◆"+ kaiji_time + " \n【"+kaiji_text+"】"+ kaiji_url #+"【ヤフー】"+"https://finance.yahoo.co.jp/search/?query=" + kaiji['コード'][:4]
-
-                        payload = {'message': message}
-                        headers = {'Authorization': 'Bearer ' + line_notify_token} 
-                        line_notify = requests.post(line_notify_api, data=payload, headers=headers)
-                        """
-                        '''
-                        slack.notify(text = dt_now.strftime('%Y/%m/%d %H:%M:%S') + 
-                            " | [PRTIMES] Press Release\r\n◆" + keyword + "◆" + str(code) +"◆"+ company_name+"◆"+ kaiji_time + "\n<" + kaiji_url + "| " + 
-                            kaiji_text + ">")
-                        '''
-                        slack_message = dt_now.strftime('%Y/%m/%d %H:%M:%S') + \
-                            " | [PRTIMES] Press Release\r\n◆" + keyword + "◆" + str(code) +"◆"+ company_name+"◆"+ kaiji_time + "\n<" + kaiji_url + "| " + \
-                            kaiji_text + ">"
-                        sendSlackDM(code, slack_message)
+            isFoundIndex = -1
+            for index, word in enumerate(keyword):
+                if word in kaiji_text:
+                    isFoundIndex = index
+                    break
+            
+            if isFoundIndex is not -1:
+                slack_message = dt_now.strftime('%Y/%m/%d %H:%M:%S') + \
+                                " | [PRTIMES] Press Release\r\n◆" + keyword[isFoundIndex] + "◆" + \
+                                str(code) + "◆" + \
+                                company_name + "◆" + \
+                                kaiji_time + "\n<" +  \
+                                kaiji_url + "| " + \
+                                kaiji_text + ">"
+                sendSlackDM(code, slack_message)
 
 
-        print(datetime.datetime.now())
+        print(datetime.now())
         time.sleep(60)
 
 #
